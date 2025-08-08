@@ -1,3 +1,9 @@
+# Fork changes
+
+- added `opts.preview_from_bottom` for pickers to show preview at bottom instead of top for terminal buffers
+
+# Original README
+
 # 🍿 `snacks.nvim`
 
 A collection of small QoL plugins for Neovim.

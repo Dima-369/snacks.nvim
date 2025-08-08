@@ -55,6 +55,7 @@ function M.new(picker)
   local opts = picker.opts
   local self = setmetatable({}, M)
   self.opts = opts.previewers
+  self.preview_from_bottom = opts.preview_from_bottom or false
   self.winhl = Snacks.picker.highlight.winhl("SnacksPickerPreview", { CursorLine = "Visual" })
   local win_opts = Snacks.win.resolve(
     {
@@ -308,7 +309,11 @@ function M:loc()
     vim.api.nvim_win_set_cursor(self.win.win, pos)
     vim.api.nvim_win_call(self.win.win, function()
       if center then
-        vim.cmd("norm! zzze")
+        if self.preview_from_bottom then
+          vim.cmd("norm! GzB")
+        else
+          vim.cmd("norm! zzze")
+        end
       end
       self:wo({ cursorline = true })
     end)
