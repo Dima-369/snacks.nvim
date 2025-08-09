@@ -338,6 +338,14 @@ function M:add(item, sort)
   self.dirty = self.dirty or #self.visible < (self.state.height or 50)
   if sort ~= false then
     local added, prev = self.topk:add(item)
+
+    -- DEBUG: Log topk operations
+    if item.file and (item.frecency or 0) > 0 then
+      print(string.format("[TOPK ADD DEBUG] %s (score: %.2f, frecency: %.2f) -> added: %s, topk_size: %d",
+        vim.fn.fnamemodify(Snacks.picker.util.path(item) or "", ":t"),
+        item.score or 0, item.frecency or 0, added and "yes" or "no", self.topk:size()))
+    end
+
     if added then
       -- check if item is before the last visible item
       if not self.dirty and #self.visible > 0 then
@@ -369,10 +377,12 @@ function M:get(idx)
   local item = topk_item or items_item
 
   -- DEBUG: Log first few items being retrieved for display
-  if idx <= 5 and item and (item.frecency or 0) > 0 then
-    print(string.format("[GET DEBUG] Item %d: %s (score: %.2f, frecency: %.2f) from %s",
-      idx, vim.fn.fnamemodify(Snacks.picker.util.path(item) or "", ":t"),
-      item.score or 0, item.frecency or 0, topk_item and "topk" or "items"))
+  if idx <= 5 then
+    print(string.format("[GET DEBUG] Item %d: topk_size: %d, topk_item: %s, items_item: %s, using: %s",
+      idx, self.topk:size(),
+      topk_item and vim.fn.fnamemodify(Snacks.picker.util.path(topk_item) or "", ":t") or "nil",
+      items_item and vim.fn.fnamemodify(Snacks.picker.util.path(items_item) or "", ":t") or "nil",
+      topk_item and "topk" or "items"))
   end
 
   return item
