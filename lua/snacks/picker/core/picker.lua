@@ -120,6 +120,9 @@ function M.new(opts)
 
   self.sort = Snacks.picker.config.sort(self.opts)
 
+  -- DEBUG: Log sort configuration
+  print(string.format("[PICKER DEBUG] Sort function created for source: %s", self.opts.source or "unknown"))
+
   self.updater = assert(uv.new_timer())
   self.matcher = require("snacks.picker.core.matcher").new(self.opts.matcher)
 

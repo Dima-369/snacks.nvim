@@ -319,6 +319,7 @@ function M:update(item)
     item.pos = nil
   end
   local score = self:match(item)
+  local initial_score = score
   item.match_tick, item.match_topk = self.tick, nil
   if score ~= 0 then
     if item.score_add then
@@ -354,6 +355,14 @@ function M:update(item)
       end
     end
     item.score = score
+
+    -- DEBUG: Log final score assignment
+    if item.file and (item.frecency or 0) > 0 then
+      print(string.format("[MATCHER DEBUG FINAL] %s -> initial: %.2f, final: %.2f, frecency: %.2f",
+        vim.fn.fnamemodify(Snacks.picker.util.path(item) or "", ":t"),
+        initial_score, score, item.frecency or 0))
+    end
+
     if self.opts.on_match then
       self.opts.on_match(self, item)
     end

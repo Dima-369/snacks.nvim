@@ -96,7 +96,17 @@ function M.new(picker)
   self.dirty = true
   self.topk = require("snacks.picker.util.minheap").new({
     capacity = 1000,
-    cmp = self.picker.sort,
+    cmp = function(a, b)
+      local result = self.picker.sort(a, b)
+      -- DEBUG: Log topk comparisons for items with frecency
+      if (a.frecency or 0) > 0 or (b.frecency or 0) > 0 then
+        print(string.format("[TOPK DEBUG] Comparing %s (score: %.2f, frecency: %.2f) vs %s (score: %.2f, frecency: %.2f) -> %s",
+          vim.fn.fnamemodify(Snacks.picker.util.path(a) or "", ":t"), a.score or 0, a.frecency or 0,
+          vim.fn.fnamemodify(Snacks.picker.util.path(b) or "", ":t"), b.score or 0, b.frecency or 0,
+          result and "a > b" or "b >= a"))
+      end
+      return result
+    end,
   })
 
   self.win:on("CursorMoved", function()
