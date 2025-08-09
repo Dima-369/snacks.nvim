@@ -341,9 +341,9 @@ function M:add(item, sort)
 
     -- DEBUG: Log topk operations
     if item.file and (item.frecency or 0) > 0 then
-      print(string.format("[TOPK ADD DEBUG] %s (score: %.2f, frecency: %.2f) -> added: %s, topk_size: %d",
+      print(string.format("[TOPK ADD DEBUG] %s (score: %.2f, frecency: %.2f) -> added: %s, topk_count: %d",
         vim.fn.fnamemodify(Snacks.picker.util.path(item) or "", ":t"),
-        item.score or 0, item.frecency or 0, added and "yes" or "no", self.topk:size()))
+        item.score or 0, item.frecency or 0, added and "yes" or "no", self.topk:count()))
     end
 
     if added then
@@ -378,8 +378,8 @@ function M:get(idx)
 
   -- DEBUG: Log first few items being retrieved for display
   if idx <= 5 then
-    print(string.format("[GET DEBUG] Item %d: topk_size: %d, topk_item: %s, items_item: %s, using: %s",
-      idx, self.topk:size(),
+    print(string.format("[GET DEBUG] Item %d: topk_count: %d, topk_item: %s, items_item: %s, using: %s",
+      idx, self.topk:count(),
       topk_item and vim.fn.fnamemodify(Snacks.picker.util.path(topk_item) or "", ":t") or "nil",
       items_item and vim.fn.fnamemodify(Snacks.picker.util.path(items_item) or "", ":t") or "nil",
       topk_item and "topk" or "items"))
