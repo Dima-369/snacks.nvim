@@ -7,6 +7,10 @@
   - Position-based scoring where recent files get higher scores (3000, 2999, 2998, etc.)
   - Multi-session compatible with file locking and atomic updates
   - Simpler, more predictable behavior for file frecency in picker
+- **Smart text truncation**: Added `opts.truncate_from_right = true` (default) to show the right end of long candidate items
+  - Preserves important content at the end of file paths and other text
+  - Can be disabled per picker by setting `truncate_from_right = false`
+  - Helps with deeply nested file paths where the filename/extension is more important than the directory structure
 
 # Original README
 

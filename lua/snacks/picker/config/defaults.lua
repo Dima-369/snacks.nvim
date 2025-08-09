@@ -95,6 +95,7 @@ local M = {}
 ---@field formatters? snacks.picker.formatters.Config|{}
 ---@field sources? snacks.picker.sources.Config|{}|table<string, snacks.picker.Config|{}>
 ---@field layouts? table<string, snacks.picker.layout.Config>
+---@field truncate_from_right? boolean when true, show the right end of long candidate items instead of truncating from the left
 --- Actions
 ---@field actions? table<string, snacks.picker.Action.spec> actions used by keymaps
 ---@field confirm? snacks.picker.Action.spec shortcut for confirm action
@@ -161,6 +162,9 @@ local defaults = {
       pos = "left", -- position of the diagnostics
     },
   },
+  -- When true, show the right end of long candidate items instead of truncating from the left
+  -- This helps preserve important content at the end of file paths or other text
+  truncate_from_right = true,
   ---@class snacks.picker.previewers.Config
   previewers = {
     diff = {

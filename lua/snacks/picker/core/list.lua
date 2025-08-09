@@ -525,6 +525,57 @@ end
 function M:_render(item, row)
   local text, extmarks = self:format(item)
   text = text:gsub("\n", " ")
+
+  -- Handle truncation from right if enabled and text is too long
+  if self.picker.opts.truncate_from_right then
+    local win_width = vim.api.nvim_win_get_width(self.win.win)
+    local text_width = vim.api.nvim_strwidth(text)
+
+    if text_width > win_width then
+      -- Truncate from the right, keeping the rightmost part
+      local chars_to_keep = win_width - 1 -- Reserve 1 char for ellipsis
+      if chars_to_keep > 0 then
+        -- Find the byte position to truncate from the right
+        local byte_len = #text
+        local char_count = 0
+        local truncate_pos = byte_len
+
+        -- Count characters from the end
+        for i = byte_len, 1, -1 do
+          local byte = text:byte(i)
+          -- Check if this is the start of a UTF-8 character
+          if byte < 0x80 or byte >= 0xC0 then
+            char_count = char_count + 1
+            if char_count > chars_to_keep then
+              truncate_pos = i
+              break
+            end
+          end
+        end
+
+        text = "…" .. text:sub(truncate_pos + 1)
+
+        -- Adjust extmarks for the truncated text
+        local offset = truncate_pos
+        for i = #extmarks, 1, -1 do
+          local extmark = extmarks[i]
+          if extmark.col and extmark.col < offset then
+            -- Remove extmarks that are in the truncated part
+            table.remove(extmarks, i)
+          else
+            -- Adjust remaining extmarks
+            if extmark.col then
+              extmark.col = extmark.col - offset + 1 -- +1 for the ellipsis
+            end
+            if extmark.end_col then
+              extmark.end_col = extmark.end_col - offset + 1
+            end
+          end
+        end
+      end
+    end
+  end
+
   vim.api.nvim_buf_set_lines(self.win.buf, row - 1, row, false, { text })
   for _, extmark in ipairs(extmarks) do
     local col = extmark.col
