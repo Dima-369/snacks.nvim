@@ -334,7 +334,9 @@ function M:update(item)
     if item.file then
       if self.frecency then
         item.frecency = item.frecency or self.frecency:get(item)
-        local frecency_bonus = (1 - 1 / (1 + item.frecency)) * BONUS_FRECENCY
+        -- Use a more direct frecency bonus that preserves score differences
+        -- Scale frecency score to a reasonable bonus range (0-100)
+        local frecency_bonus = math.min(item.frecency / 30, 100)
         score = score + frecency_bonus
 
         -- DEBUG: Log frecency bonus application
