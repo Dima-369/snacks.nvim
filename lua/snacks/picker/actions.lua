@@ -145,6 +145,13 @@ function M.jump(picker, _, action)
       vim.api.nvim_buf_delete(current_buf, { force = true })
     end
   end
+
+  -- Update frecency for selected items
+  if picker.matcher and picker.matcher.frecency then
+    for _, item in ipairs(items) do
+      picker.matcher.frecency:visit(item)
+    end
+  end
 end
 
 function M.close(picker)

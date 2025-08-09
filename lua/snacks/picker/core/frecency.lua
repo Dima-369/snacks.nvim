@@ -1,44 +1,207 @@
--- Frecency based on exponential decay. Roughly based on:
--- https://wiki.mozilla.org/User:Jesse/NewFrecency?title=User:Jesse/NewFrecency
+-- MRU-based frecency implementation
+-- Maintains a Most Recently Used list of files with constant max size
 ---@class snacks.picker.Frecency
----@field now number
----@field cache table<string, number>
+---@field mru_list snacks.picker.frecency.Entry[]
+---@field path_index table<string, number>
 local M = {}
 M.__index = M
 
 local uv = vim.uv or vim.loop
-local store_file = vim.fn.stdpath("data") .. "/snacks/picker-frecency"
+local store_file = vim.fn.stdpath("data") .. "/snacks/picker-frecency-mru.json"
 
-local HALF_LIFE = 30 * 24 * 3600 -- Half-life = 30 days (in seconds)
-local LAMBDA = math.log(2) / HALF_LIFE -- λ = ln(2) / half_life
-local SEED_VALUE = 1
-local DEFAULT_VALUE = 1
-local MAX_STORE_SIZE = 10000
+local MAX_ENTRIES = 3000
+local LOCK_TIMEOUT_MS = 1000
+local LOCK_RETRY_MS = 50
+
+---@class snacks.picker.frecency.Entry
+---@field path string
+---@field timestamp number
 
 ---@class snacks.picker.frecency.Store
----@field set fun(self:snacks.picker.frecency.Store, key:string, value:number)
----@field get fun(self:snacks.picker.frecency.Store, key:string):number
----@field close fun(self:snacks.picker.frecency.Store)
----@field get_all fun(self:snacks.picker.frecency.Store):table<string, number>
+---@field mru_list snacks.picker.frecency.Entry[]
+---@field path_index table<string, number>
+---@field file_path string
+---@field lock_file string
+local Store = {}
+Store.__index = Store
 
--- Global store of frecency deadlinesl
+-- Global store instance
 ---@type snacks.picker.frecency.Store?
 M.store = nil
 
-function M.setup()
-  if
-    not pcall(function()
-      local db = require("snacks.picker.util.db").new(store_file .. ".sqlite3", "number")
-      M.store = db --[[@as snacks.picker.frecency.Store]]
-      -- Cleanup old entries
-      local cutoff = db:prepare("SELECT value FROM data ORDER BY value DESC LIMIT 1 OFFSET ?;")
-      if cutoff:exec({ MAX_STORE_SIZE - 1 }) == 100 then -- 100 == SQLITE_ROW
-        db:prepare("DELETE FROM data WHERE value < ?;"):exec({ cutoff:col("number") })
+-- Store implementation
+function Store.new(file_path)
+  local self = setmetatable({}, Store)
+  self.file_path = file_path
+  self.lock_file = file_path .. ".lock"
+  self.mru_list = {}
+  self.path_index = {}
+  self:load()
+  return self
+end
+
+function Store:acquire_lock()
+  local start_time = uv.hrtime()
+  while (uv.hrtime() - start_time) / 1000000 < LOCK_TIMEOUT_MS do
+    local fd = uv.fs_open(self.lock_file, "wx", 438) -- 0666 in octal
+    if fd then
+      -- Write our process ID to the lock file for debugging
+      local pid = tostring(vim.fn.getpid())
+      uv.fs_write(fd, pid, 0)
+      uv.fs_close(fd)
+      return true
+    end
+    -- Check if lock file is stale (older than 5 seconds)
+    local stat = uv.fs_stat(self.lock_file)
+    if stat and (os.time() - stat.mtime.sec) > 5 then
+      -- Try to read the PID and check if process is still running
+      local lock_fd = uv.fs_open(self.lock_file, "r", 438)
+      if lock_fd then
+        local pid_data = uv.fs_read(lock_fd, 32, 0)
+        uv.fs_close(lock_fd)
+        local pid = tonumber(pid_data)
+        -- On Unix systems, we can check if process exists
+        if pid and vim.fn.has("unix") == 1 then
+          local result = vim.fn.system("kill -0 " .. pid .. " 2>/dev/null")
+          if vim.v.shell_error ~= 0 then
+            -- Process doesn't exist, remove stale lock
+            uv.fs_unlink(self.lock_file)
+          end
+        else
+          -- Fallback: remove old lock files
+          uv.fs_unlink(self.lock_file)
+        end
       end
-    end)
-  then
-    M.store = require("snacks.picker.util.kv").new(store_file .. ".dat", { max_size = MAX_STORE_SIZE }) --[[@as snacks.picker.frecency.Store]]
+    end
+    vim.wait(LOCK_RETRY_MS)
   end
+  return false
+end
+
+function Store:release_lock()
+  pcall(uv.fs_unlink, self.lock_file)
+end
+
+function Store:load()
+  if not self:acquire_lock() then
+    -- If we can't acquire lock, try to load without it (read-only)
+    local fd = uv.fs_open(self.file_path, "r", 438)
+    if fd then
+      local stat = uv.fs_fstat(fd)
+      if stat and stat.size > 0 then
+        local data = uv.fs_read(fd, stat.size, 0)
+        uv.fs_close(fd)
+
+        local ok, parsed = pcall(vim.json.decode, data)
+        if ok and type(parsed) == "table" and parsed.entries then
+          self.mru_list = parsed.entries or {}
+          self:rebuild_index()
+        end
+      else
+        uv.fs_close(fd)
+      end
+    end
+    return false
+  end
+
+  local fd = uv.fs_open(self.file_path, "r", 438)
+  if fd then
+    local stat = uv.fs_fstat(fd)
+    if stat and stat.size > 0 then
+      local data = uv.fs_read(fd, stat.size, 0)
+      uv.fs_close(fd)
+
+      local ok, parsed = pcall(vim.json.decode, data)
+      if ok and type(parsed) == "table" and parsed.entries then
+        self.mru_list = parsed.entries or {}
+        self:rebuild_index()
+      end
+    else
+      uv.fs_close(fd)
+    end
+  end
+
+  self:release_lock()
+  return true
+end
+
+function Store:save()
+  if not self:acquire_lock() then
+    return false
+  end
+
+  -- Ensure directory exists
+  vim.fn.mkdir(vim.fn.fnamemodify(self.file_path, ":h"), "p")
+
+  local data = vim.json.encode({
+    version = 1,
+    entries = self.mru_list
+  })
+
+  local fd = uv.fs_open(self.file_path, "w", 438)
+  if fd then
+    uv.fs_write(fd, data, 0)
+    uv.fs_close(fd)
+    self:release_lock()
+    return true
+  end
+
+  self:release_lock()
+  return false
+end
+
+function Store:rebuild_index()
+  self.path_index = {}
+  for i, entry in ipairs(self.mru_list) do
+    self.path_index[entry.path] = i
+  end
+end
+
+function Store:visit(path)
+  -- Normalize the path to ensure consistency
+  path = vim.fs.normalize(path)
+
+  local now = os.time()
+  local existing_idx = self.path_index[path]
+
+  if existing_idx then
+    -- Remove existing entry
+    table.remove(self.mru_list, existing_idx)
+  end
+
+  -- Add to front
+  table.insert(self.mru_list, 1, {
+    path = path,
+    timestamp = now
+  })
+
+  -- Trim to max size
+  if #self.mru_list > MAX_ENTRIES then
+    for i = MAX_ENTRIES + 1, #self.mru_list do
+      self.mru_list[i] = nil
+    end
+  end
+
+  self:rebuild_index()
+  return self:save()
+end
+
+function Store:get_score(path)
+  local idx = self.path_index[path]
+  if not idx then
+    return 0
+  end
+  -- Score decreases with position in MRU list
+  -- Top item gets score close to MAX_ENTRIES, bottom gets score close to 1
+  return MAX_ENTRIES - idx + 1
+end
+
+function Store:close()
+  self:save()
+end
+
+function M.setup()
+  M.store = Store.new(store_file)
 
   local group = vim.api.nvim_create_augroup("snacks_picker_frecency", {})
   vim.api.nvim_create_autocmd("ExitPre", {
@@ -60,38 +223,26 @@ function M.setup()
       M.visit_buf(ev.buf)
     end,
   })
-  -- Visit existing buffers
-  for _, buf in ipairs(vim.api.nvim_list_bufs()) do
-    M.visit_buf(buf)
+  -- Visit existing buffers (only if vim.api is available)
+  if vim.api and vim.api.nvim_list_bufs then
+    for _, buf in ipairs(vim.api.nvim_list_bufs()) do
+      M.visit_buf(buf)
+    end
   end
 end
 
 function M.new()
   local self = setmetatable({}, M)
-  self.now = os.time()
   if not M.store then
     M.setup()
   end
-  self.cache = M.store:get_all()
+  -- Cache the MRU list for this instance
+  self.mru_list = vim.deepcopy(M.store.mru_list)
+  self.path_index = vim.deepcopy(M.store.path_index)
   return self
 end
 
---- Convert from a current score s into a "deadline date"
---- t = now() + (ln(s) / λ)
----@param score number
-function M:to_deadline(score)
-  return self.now + (math.log(score) / LAMBDA)
-end
-
---- Convert from a "deadline date" back into a current score
---- s = e^(λ * (deadline - now))
-function M:to_score(deadline)
-  return math.exp(LAMBDA * (deadline - self.now))
-end
-
 --- Get the current frecency score for an item.
---- If the item is not tracked yet, it will seed it
---- based on the last used time or last modified time.
 ---@param item snacks.picker.Item
 ---@param opts? {seed?: boolean}
 function M:get(item, opts)
@@ -100,60 +251,56 @@ function M:get(item, opts)
   if not path then
     return 0
   end
+
   if item.dir then
     -- frecency of a directory is the sum of frecencies of all files in it
     local score = 0
     local prefix = path .. "/"
-    for k, v in pairs(self.cache) do
-      if k:find(prefix, 1, true) == 1 then
-        score = score + self:to_score(v)
+    for _, entry in ipairs(self.mru_list) do
+      if entry.path:find(prefix, 1, true) == 1 then
+        local idx = self.path_index[entry.path]
+        if idx then
+          score = score + (MAX_ENTRIES - idx + 1)
+        end
       end
     end
     return score
   end
-  local deadline = self.cache[path]
-  if not deadline then
+
+  local idx = self.path_index[path]
+  if not idx then
     return opts.seed ~= false and self:seed(item) or 0
   end
-  return self:to_score(deadline)
+
+  -- Score decreases with position in MRU list
+  return MAX_ENTRIES - idx + 1
 end
 
 ---@param item snacks.picker.Item
 ---@param value? number
 function M:seed(item, value)
-  -- only seed recent files or items with buffer info
-  if not (item.info or item.recent) then
-    return 0
-  end
-  local last_used = type(item.info) == "table" and item.info.lastused or nil
-  local path = Snacks.picker.util.path(item)
-  if not path then
-    return 0
-  end
-  if not last_used then
-    local stat = uv.fs_stat(path)
-    last_used = stat and stat.mtime.sec
-  end
-  if not last_used then
-    return 0
-  end
-  -- Calculate decayed single-visit score
-  local dt = self.now - last_used -- in seconds
-  return (value or SEED_VALUE) * math.exp(-LAMBDA * dt)
+  -- For MRU system, seeding just means the item isn't in the list yet
+  -- We don't add it automatically - only when explicitly visited
+  return 0
 end
 
 --- Add a "visit" to the item.
---- If the item doesn't exist, it is created with initial score = `visit_value`.
---- Otherwise, the new score is old_score + visit_value.
+--- Moves the item to the top of the MRU list.
 ---@param item snacks.picker.Item
----@param value? number @the "points" to add (e.g. typed=2, clicked=1, etc.)
+---@param value? number @ignored in MRU system
 function M:visit(item, value)
   local path = Snacks.picker.util.path(item)
   if not path then
     return
   end
-  local score = self:get(item, { seed = false }) + (value or DEFAULT_VALUE)
-  self.store:set(path, self:to_deadline(score))
+
+  -- Update the global store
+  if M.store then
+    M.store:visit(path)
+    -- Update our local cache
+    self.mru_list = vim.deepcopy(M.store.mru_list)
+    self.path_index = vim.deepcopy(M.store.path_index)
+  end
 end
 
 ---@param buf number
@@ -166,16 +313,18 @@ function M.visit_buf(buf, value)
   if file == "" or not vim.uv.fs_stat(file) then
     return
   end
-  local frecency = M.new()
-  frecency:visit({
-    text = "",
-    idx = 1,
-    score = 0,
-    file = file,
-    buf = buf,
-    info = vim.fn.getbufinfo(buf)[1],
-  }, value)
+
+  -- Normalize the file path
+  file = vim.fs.normalize(file)
+
+  -- Update the global store directly for buffer visits
+  if M.store then
+    M.store:visit(file)
+  end
   return true
 end
+
+-- Expose Store class for testing
+M.Store = Store
 
 return M

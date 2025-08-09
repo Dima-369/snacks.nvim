@@ -1,6 +1,12 @@
 # Fork changes
 
 - added `opts.preview_from_bottom` for pickers to show preview at bottom instead of top for terminal buffers
+- **Rewritten frecency implementation**: Replaced exponential decay scoring with MRU (Most Recently Used) list system
+  - Maintains constant 3000 entry history instead of score-based approach
+  - When files are picked or visited, they move to top of MRU list with duplicate removal
+  - Position-based scoring where recent files get higher scores (3000, 2999, 2998, etc.)
+  - Multi-session compatible with file locking and atomic updates
+  - Simpler, more predictable behavior for file frecency in picker
 
 # Original README
 
