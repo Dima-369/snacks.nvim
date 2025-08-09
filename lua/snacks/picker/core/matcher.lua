@@ -60,11 +60,6 @@ function M.new(opts)
   self.tick = 0
   self.score = require("snacks.picker.core.score").new(self.opts)
   self.frecency = self.opts.frecency and require("snacks.picker.core.frecency").new() or nil
-
-  -- DEBUG: Log matcher configuration
-  print(string.format("[MATCHER DEBUG] Matcher created with frecency: %s",
-    self.frecency and "enabled" or "disabled"))
-
   return self
 end
 
@@ -319,7 +314,6 @@ function M:update(item)
     item.pos = nil
   end
   local score = self:match(item)
-  local initial_score = score
   item.match_tick, item.match_topk = self.tick, nil
   if score ~= 0 then
     if item.score_add then
@@ -339,13 +333,6 @@ function M:update(item)
         -- Scale frecency score to a reasonable bonus range (0-100)
         local frecency_bonus = math.min(item.frecency / 30, 100)
         score = score + frecency_bonus
-
-        -- DEBUG: Log frecency bonus application
-        if item.frecency > 0 then
-          print(string.format("[MATCHER DEBUG] %s -> frecency: %.2f, bonus: %.2f, total_score: %.2f",
-            vim.fn.fnamemodify(Snacks.picker.util.path(item) or "", ":t"),
-            item.frecency, frecency_bonus, score))
-        end
       end
       if
         self.opts.cwd_bonus
@@ -355,14 +342,6 @@ function M:update(item)
       end
     end
     item.score = score
-
-    -- DEBUG: Log final score assignment
-    if item.file and (item.frecency or 0) > 0 then
-      print(string.format("[MATCHER DEBUG FINAL] %s -> initial: %.2f, final: %.2f, frecency: %.2f",
-        vim.fn.fnamemodify(Snacks.picker.util.path(item) or "", ":t"),
-        initial_score, score, item.frecency or 0))
-    end
-
     if self.opts.on_match then
       self.opts.on_match(self, item)
     end

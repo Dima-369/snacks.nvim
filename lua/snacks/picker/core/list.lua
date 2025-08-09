@@ -96,17 +96,7 @@ function M.new(picker)
   self.dirty = true
   self.topk = require("snacks.picker.util.minheap").new({
     capacity = 1000,
-    cmp = function(a, b)
-      local result = self.picker.sort(a, b)
-      -- DEBUG: Log topk comparisons for items with frecency
-      if (a.frecency or 0) > 0 or (b.frecency or 0) > 0 then
-        print(string.format("[TOPK DEBUG] Comparing %s (score: %.2f, frecency: %.2f) vs %s (score: %.2f, frecency: %.2f) -> %s",
-          vim.fn.fnamemodify(Snacks.picker.util.path(a) or "", ":t"), a.score or 0, a.frecency or 0,
-          vim.fn.fnamemodify(Snacks.picker.util.path(b) or "", ":t"), b.score or 0, b.frecency or 0,
-          result and "a > b" or "b >= a"))
-      end
-      return result
-    end,
+    cmp = self.picker.sort,
   })
 
   self.win:on("CursorMoved", function()
@@ -327,25 +317,10 @@ function M:add(item, sort)
   local idx = #self.items + 1
   self.items[idx] = item
 
-  -- DEBUG: Log items being added with their scores
-  if item.file and item.score and item.score > 1000 then
-    print(string.format("[LIST DEBUG] Adding item: %s, score: %.2f, frecency: %.2f",
-      vim.fn.fnamemodify(Snacks.picker.util.path(item) or "", ":t"),
-      item.score, item.frecency or 0))
-  end
-
   -- if the visible items are less than the height, then we need to render
   self.dirty = self.dirty or #self.visible < (self.state.height or 50)
   if sort ~= false then
     local added, prev = self.topk:add(item)
-
-    -- DEBUG: Log topk operations
-    if item.file and (item.frecency or 0) > 0 then
-      print(string.format("[TOPK ADD DEBUG] %s (score: %.2f, frecency: %.2f) -> added: %s, topk_count: %d",
-        vim.fn.fnamemodify(Snacks.picker.util.path(item) or "", ":t"),
-        item.score or 0, item.frecency or 0, added and "yes" or "no", self.topk:count()))
-    end
-
     if added then
       -- check if item is before the last visible item
       if not self.dirty and #self.visible > 0 then
@@ -372,20 +347,7 @@ end
 ---@param idx number
 ---@return snacks.picker.Item?
 function M:get(idx)
-  local topk_item = self.topk:get(idx)
-  local items_item = self.items[idx]
-  local item = topk_item or items_item
-
-  -- DEBUG: Log first few items being retrieved for display
-  if idx <= 5 then
-    print(string.format("[GET DEBUG] Item %d: topk_count: %d, topk_item: %s, items_item: %s, using: %s",
-      idx, self.topk:count(),
-      topk_item and vim.fn.fnamemodify(Snacks.picker.util.path(topk_item) or "", ":t") or "nil",
-      items_item and vim.fn.fnamemodify(Snacks.picker.util.path(items_item) or "", ":t") or "nil",
-      topk_item and "topk" or "items"))
-  end
-
-  return item
+  return self.topk:get(idx) or self.items[idx]
 end
 
 function M:height()
@@ -684,14 +646,6 @@ function M:render()
     for i = self.top, math.min(self:count(), self.top + height - 1) do
       local item = assert(self:get(i), "item not found")
       self.visible[i - self.top + 1] = item
-
-      -- DEBUG: Log rendering order for items with frecency
-      if (item.frecency or 0) > 0 then
-        print(string.format("[RENDER DEBUG] Position %d: %s (score: %.2f, frecency: %.2f)",
-          i, vim.fn.fnamemodify(Snacks.picker.util.path(item) or "", ":t"),
-          item.score or 0, item.frecency or 0))
-      end
-
       local row = self:idx2row(i)
       self:_render(item, row)
     end
