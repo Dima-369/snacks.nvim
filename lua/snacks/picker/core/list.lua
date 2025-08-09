@@ -364,7 +364,18 @@ end
 ---@param idx number
 ---@return snacks.picker.Item?
 function M:get(idx)
-  return self.topk:get(idx) or self.items[idx]
+  local topk_item = self.topk:get(idx)
+  local items_item = self.items[idx]
+  local item = topk_item or items_item
+
+  -- DEBUG: Log first few items being retrieved for display
+  if idx <= 5 and item and (item.frecency or 0) > 0 then
+    print(string.format("[GET DEBUG] Item %d: %s (score: %.2f, frecency: %.2f) from %s",
+      idx, vim.fn.fnamemodify(Snacks.picker.util.path(item) or "", ":t"),
+      item.score or 0, item.frecency or 0, topk_item and "topk" or "items"))
+  end
+
+  return item
 end
 
 function M:height()
@@ -663,6 +674,14 @@ function M:render()
     for i = self.top, math.min(self:count(), self.top + height - 1) do
       local item = assert(self:get(i), "item not found")
       self.visible[i - self.top + 1] = item
+
+      -- DEBUG: Log rendering order for items with frecency
+      if (item.frecency or 0) > 0 then
+        print(string.format("[RENDER DEBUG] Position %d: %s (score: %.2f, frecency: %.2f)",
+          i, vim.fn.fnamemodify(Snacks.picker.util.path(item) or "", ":t"),
+          item.score or 0, item.frecency or 0))
+      end
+
       local row = self:idx2row(i)
       self:_render(item, row)
     end
