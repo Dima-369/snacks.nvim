@@ -158,8 +158,8 @@ function Store:rebuild_index()
 end
 
 function Store:visit(path)
-  -- Normalize the path to ensure consistency
-  path = vim.fs.normalize(path)
+  -- Normalize the path to ensure consistency - use same logic as picker
+  path = self:normalize_path(path)
 
   local now = os.time()
   local existing_idx = self.path_index[path]
@@ -186,7 +186,24 @@ function Store:visit(path)
   return self:save()
 end
 
+function Store:normalize_path(path)
+  -- Use the same normalization as the picker system
+  if not path then return nil end
+
+  -- First normalize with vim.fs.normalize to handle ~ expansion and clean up
+  local normalized = vim.fs.normalize(path)
+
+  -- For consistency, always store absolute paths
+  if not vim.startswith(normalized, "/") then
+    normalized = vim.fn.fnamemodify(normalized, ":p")
+  end
+
+  return normalized
+end
+
 function Store:get_score(path)
+  -- Normalize path for lookup using same logic
+  path = self:normalize_path(path)
   local idx = self.path_index[path]
   if not idx then
     return 0
@@ -252,6 +269,16 @@ function M:get(item, opts)
     return 0
   end
 
+  -- Normalize path for consistent lookup
+  if M.store then
+    path = M.store:normalize_path(path)
+  else
+    path = vim.fs.normalize(path)
+    if not vim.startswith(path, "/") then
+      path = vim.fn.fnamemodify(path, ":p")
+    end
+  end
+
   if item.dir then
     -- frecency of a directory is the sum of frecencies of all files in it
     local score = 0
@@ -313,9 +340,6 @@ function M.visit_buf(buf, value)
   if file == "" or not vim.uv.fs_stat(file) then
     return
   end
-
-  -- Normalize the file path
-  file = vim.fs.normalize(file)
 
   -- Update the global store directly for buffer visits
   if M.store then
