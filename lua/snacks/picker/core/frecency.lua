@@ -256,6 +256,17 @@ function M.new()
   -- Cache the MRU list for this instance
   self.mru_list = vim.deepcopy(M.store.mru_list)
   self.path_index = vim.deepcopy(M.store.path_index)
+
+  -- DEBUG: Log MRU list contents
+  print(string.format("[FRECENCY DEBUG] MRU list has %d entries:", #self.mru_list))
+  for i = 1, math.min(10, #self.mru_list) do
+    local entry = self.mru_list[i]
+    print(string.format("  %d. %s", i, vim.fn.fnamemodify(entry.path, ":t")))
+  end
+  if #self.mru_list > 10 then
+    print(string.format("  ... and %d more entries", #self.mru_list - 10))
+  end
+
   return self
 end
 
@@ -295,12 +306,20 @@ function M:get(item, opts)
   end
 
   local idx = self.path_index[path]
-  if not idx then
-    return opts.seed ~= false and self:seed(item) or 0
+  local score = 0
+  if idx then
+    score = MAX_ENTRIES - idx + 1
+  elseif opts.seed ~= false then
+    score = self:seed(item)
   end
 
-  -- Score decreases with position in MRU list
-  return MAX_ENTRIES - idx + 1
+  -- DEBUG: Log frecency lookups
+  if score > 0 then
+    print(string.format("[FRECENCY DEBUG] %s -> score: %d (idx: %s)",
+      vim.fn.fnamemodify(path, ":t"), score, idx or "nil"))
+  end
+
+  return score
 end
 
 ---@param item snacks.picker.Item

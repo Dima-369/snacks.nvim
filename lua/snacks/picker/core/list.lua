@@ -316,6 +316,14 @@ end
 function M:add(item, sort)
   local idx = #self.items + 1
   self.items[idx] = item
+
+  -- DEBUG: Log items being added with their scores
+  if item.file and item.score and item.score > 1000 then
+    print(string.format("[LIST DEBUG] Adding item: %s, score: %.2f, frecency: %.2f",
+      vim.fn.fnamemodify(Snacks.picker.util.path(item) or "", ":t"),
+      item.score, item.frecency or 0))
+  end
+
   -- if the visible items are less than the height, then we need to render
   self.dirty = self.dirty or #self.visible < (self.state.height or 50)
   if sort ~= false then
