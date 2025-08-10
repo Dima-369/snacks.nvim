@@ -1,5 +1,6 @@
 # Fork changes
 
+- fix incorrect window selection on closing/confirm picker (https://github.com/folke/snacks.nvim/pull/2012)
 - added `opts.preview_from_bottom` for pickers to show preview at bottom instead of top for terminal buffers
 - **Rewritten frecency implementation**: Replaced exponential decay scoring with MRU (Most Recently Used) list system
   - Maintains constant 3000 entry history instead of score-based approach
