@@ -530,7 +530,7 @@ function M.cmd(picker, item)
     vim.schedule(function()
       vim.api.nvim_input(":")
       vim.schedule(function()
-        vim.fn.setcmdline(item.cmd)
+        vim.fn.setcmdline(item.cmd .. " ")
       end)
     end)
   end
