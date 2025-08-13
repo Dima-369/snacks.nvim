@@ -12,6 +12,7 @@
 - **Smart text truncation**: Added `opts.truncate_from_right = true` (default) to show the right end of long candidate items
   - Preserves important content at the end of file paths and other text
   - Can be disabled per picker by setting `truncate_from_right = false`
+  - Can be toggled interactively inside a picker with the `toggle_truncate_from_right` action (bound to `<a-t>` by default).
   - Helps with deeply nested file paths where the filename/extension is more important than the directory structure
 
 ## Frecency API

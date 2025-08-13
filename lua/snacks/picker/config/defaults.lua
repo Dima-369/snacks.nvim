@@ -196,6 +196,7 @@ local defaults = {
     ignored = "i",
     modified = "m",
     regex = { icon = "R", value = false },
+    truncate_from_right = { icon = "»", value = true },
   },
   win = {
     -- input window
@@ -222,6 +223,7 @@ local defaults = {
         ["<a-i>"] = { "toggle_ignored", mode = { "i", "n" } },
         ["<a-m>"] = { "toggle_maximize", mode = { "i", "n" } },
         ["<a-p>"] = { "toggle_preview", mode = { "i", "n" } },
+        ["<a-t>" ] = { "toggle_truncate_from_right", mode = { "i", "n" } },
         ["<a-w>"] = { "cycle_win", mode = { "i", "n" } },
         ["<c-a>"] = { "select_all", mode = { "n", "i" } },
         ["<c-b>"] = { "preview_scroll_up", mode = { "i", "n" } },

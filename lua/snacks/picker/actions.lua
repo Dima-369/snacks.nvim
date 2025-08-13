@@ -725,4 +725,11 @@ function M.list_scroll_up(picker)
   picker.list:scroll(-picker.list.state.scroll)
 end
 
+function M.toggle_truncate_from_right(picker)
+  picker.opts.truncate_from_right = not picker.opts.truncate_from_right
+  picker:update_titles()
+  picker.list.dirty = true
+  picker:update()
+end
+
 return M
