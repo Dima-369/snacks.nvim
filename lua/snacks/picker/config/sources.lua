@@ -153,7 +153,20 @@ M.commands = {
   finder = "vim_commands",
   format = "command",
   preview = "preview",
-  confirm = "cmd",
+  -- When the input is empty, don't re-sort the list.
+  -- This preserves our custom frecency order from the finder.
+  matcher = {
+    sort_empty = false,
+  },
+  -- Custom confirm action to remember the choice.
+  confirm = function(picker, item)
+    if item and item.cmd then
+      -- Remember the selected command for frecency
+      require("snacks.frecency").remember(item.cmd)
+    end
+    -- Execute the default "cmd" action
+    require("snacks.picker.actions").cmd(picker, item)
+  end,
 }
 
 ---@class snacks.picker.diagnostics.Config: snacks.picker.Config

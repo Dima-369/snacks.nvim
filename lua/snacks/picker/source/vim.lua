@@ -4,34 +4,56 @@ local M = {}
 ---@field name string
 
 function M.commands()
-  local commands = vim.api.nvim_get_commands({})
-  for k, v in pairs(vim.api.nvim_buf_get_commands(0, {})) do
-    if type(k) == "string" then -- fixes vim.empty_dict() bug
-      commands[k] = v
+  -- Cache the commands list on the first run. This is a safe context.
+  if not all_commands then
+    all_commands = vim.api.nvim_get_commands({})
+    for k, v in pairs(vim.api.nvim_buf_get_commands(0, {})) do
+      if type(k) == "string" then
+        all_commands[k] = v
+      end
     end
   end
-  for _, c in ipairs(vim.fn.getcompletion("", "command")) do
-    if not commands[c] and c:find("^[a-z]") then
-      commands[c] = { definition = "completion" }
-    end
-  end
+
   ---@async
   ---@param cb async fun(item: snacks.picker.finder.Item)
   return function(cb)
-    ---@type string[]
-    local names = vim.tbl_keys(commands)
-    table.sort(names)
-    for _, name in pairs(names) do
-      local def = commands[name]
+    -- Get recent items from frecency store
+    local recent_items = require("snacks.frecency").get_recent_items()
+    local seen = {}
+
+    -- First, yield recent commands
+    for _, entry in ipairs(recent_items) do
+      -- Make sure it's a command and not a file path
+      if not entry.is_path and all_commands[entry.item] and not seen[entry.item] then
+        local def = all_commands[entry.item]
+        cb({
+          text = entry.item,
+          desc = def.script_id and def.script_id < 0 and def.definition or nil,
+          command = def,
+          cmd = entry.item,
+          preview = { text = vim.inspect(def), ft = "lua" },
+        })
+        seen[entry.item] = true
+      end
+    end
+
+    -- Then, yield the rest of the commands alphabetically
+    local remaining_names = {}
+    for name in pairs(all_commands) do
+      if not seen[name] then
+        table.insert(remaining_names, name)
+      end
+    end
+    table.sort(remaining_names)
+
+    for _, name in ipairs(remaining_names) do
+      local def = all_commands[name]
       cb({
         text = name,
         desc = def.script_id and def.script_id < 0 and def.definition or nil,
         command = def,
         cmd = name,
-        preview = {
-          text = vim.inspect(def),
-          ft = "lua",
-        },
+        preview = { text = vim.inspect(def), ft = "lua" },
       })
     end
   end

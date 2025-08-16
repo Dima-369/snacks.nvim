@@ -237,9 +237,7 @@ end
 --- Get recent files only (ignoring non-paths), sorted by recency
 ---@return string[] # list of file paths, most recent first
 function M.get_recent_files()
-  if not M.store then
-    M.setup()
-  end
+  assert(M.store, "Snacks.frecency is not initialized. Call Snacks.frecency.setup() first.")
   return M.store:get_recent_files()
 end
 
@@ -247,18 +245,14 @@ end
 ---@param text_or_path string
 ---@return boolean # true if successfully saved
 function M.remember(text_or_path)
-  if not M.store then
-    M.setup()
-  end
+  assert(M.store, "Snacks.frecency is not initialized. Call Snacks.frecency.setup() first.")
   return M.store:remember(text_or_path)
 end
 
 --- Get all recent items (both paths and non-paths), sorted by recency
 ---@return snacks.frecency.Entry[] # list of entries, most recent first
 function M.get_recent_items()
-  if not M.store then
-    M.setup()
-  end
+  assert(M.store, "Snacks.frecency is not initialized. Call Snacks.frecency.setup() first.")
   return M.store:get_recent_items()
 end
 

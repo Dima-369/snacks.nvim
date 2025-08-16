@@ -150,6 +150,8 @@ function M.setup(opts)
   end
   config = vim.tbl_deep_extend("force", config, opts or {})
 
+  M.frecency.setup()
+
   local events = {
     BufReadPre = { "bigfile", "image" },
     BufReadPost = { "quickfile", "indent" },
